@@ -138,7 +138,7 @@ class Database(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp()
         cls.app = dblpbib.App(cls.tmp)
         n = dblpdb.build(FIXTURE, cls.app.db.path)
-        assert n == 7, n
+        assert n == 9, n
 
     @classmethod
     def tearDownClass(cls):
@@ -231,6 +231,30 @@ class Database(unittest.TestCase):
         self.assertEqual(m['best'], 'conf/itp/BrunT19')
         self.assertIsNone(self.app.match('@misc{w, title={Isabelle}, howpublished={web}}')['best'])
 
+    def test_name_spellings(self):
+        raw = '''@article{mon, author = {Krsti{\\'c}, Sr\\dj{}an and Traytel, Dmitriy}, title = {Monitoring without accents},
+  journal = {J. Test}, doi = {10.1234/test.2022}, year = 2022}'''
+        self.assertEqual(self.app.match(raw)['best'], 'journals/test/KrsticT22')
+        items = [{'id': 1, 'kind': 'raw', 'raw': raw, 'match': 'journals/test/KrsticT22'},
+                 {'id': 2, 'kind': 'dblp', 'dblp': 'journals/test/KrsticB23'}]          # added later, e.g. from search
+        res = self.render(items)['items']
+        self.assertEqual(dict(res[0]['alt']['fields'])['author'], "Sr{\\dj}an Krsti{\\'{c}} and Dmitriy Traytel")
+        self.assertEqual(dict(res[1]['fields'])['author'], "Sr{\\dj}an Krsti{\\'{c}} and David Basin")
+        # after "Use dblp version" the original text still provides the spelling
+        items[0] = {'id': 1, 'kind': 'dblp', 'dblp': 'journals/test/KrsticT22', 'key': 'mon', 'orig': raw}
+        res = self.render(items)['items']
+        self.assertEqual(dict(res[0]['fields'])['author'], "Sr{\\dj}an Krsti{\\'{c}} and Dmitriy Traytel")
+        self.assertEqual(dict(self.render(items, latex=False)['items'][0]['fields'])['author'], 'Srđan Krstić and Dmitriy Traytel')
+        res = self.render(items, keep_name_spellings=False)['items']
+        self.assertEqual(dict(res[1]['fields'])['author'], 'Srdan Krstic and David Basin')
+
+    def test_latex_names(self):
+        for t, out in [("Sr\\dj{}an Krsti\\'c", 'Srđan Krstić'), ("Krsti\\'{c}, Sr\\dj an", 'Srđan Krstić'),
+                       ("Ji{\\v{r}}{\\'\\i} {\\v{S}}ebek", 'Jiří Šebek'), ('G{\\"o}del, Kurt', 'Kurt Gödel'),
+                       ('{\\L}ukasz Czajka', 'Łukasz Czajka'), ("Jos\\'{e}~Meseguer", 'José Meseguer')]:
+            self.assertEqual(bibgen.plain_name(t), out)
+        self.assertEqual(bibgen.fold_name('Srđan Krstić'), bibgen.fold_name('Srdan Krstic 0001'))
+
     def test_same_entry(self):
         gen = self.render([{'id': 1, 'kind': 'dblp', 'dblp': 'conf/itp/BrunT19', 'key': 'k'}])['items'][0]['text']
         res = self.render([{'id': 1, 'kind': 'raw', 'raw': gen, 'match': 'conf/itp/BrunT19'}])
@@ -296,7 +320,7 @@ class UpdateJob(unittest.TestCase):
                     break
                 time.sleep(0.1)
             self.assertEqual(app.job['phase'], 'done', app.job)
-            self.assertEqual(app.db.meta()['records'], '7')
+            self.assertEqual(app.db.meta()['records'], '9')
             self.assertEqual(app.db.meta()['source'], 'dblp.xml.gz')            # no absolute paths
             self.assertEqual(app.dump_info()['name'], 'dblp.xml.gz')
             self.assertEqual(run('rebuild')['phase'], 'done')                   # from the downloaded dump
@@ -316,7 +340,7 @@ class UpdateJob(unittest.TestCase):
             os.remove(app.db.path)
             self.assertEqual(run('download')['phase'], 'done', app.job)
             self.assertEqual(len(gets), 1)
-            self.assertEqual(app.db.meta()['records'], '7')
+            self.assertEqual(app.db.meta()['records'], '9')
             # force downloads anyway
             self.assertTrue(app.start_job('download', force=True))
             for _ in range(100):

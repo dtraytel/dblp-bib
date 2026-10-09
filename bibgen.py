@@ -36,6 +36,7 @@ DEFAULT_OPTIONS = {
     'abbrev_names': False,          # J. C. Blanchette
     'key_style': 'dblp',            # dblp | short | authoryear
     'keep_keys': True,              # keep the keys of entries of a loaded .bib file when updating them from dblp
+    'keep_name_spellings': True,    # names in a loaded .bib file that dblp writes without accents keep their spelling
     'normalize_foreign': False,     # apply the substitutions also to entries that do not come from dblp
     'custom_rules': '',             # lines "field: regex => replacement"; field * = all
 }
@@ -465,10 +466,15 @@ def make_key(rec, style):
     return 'DBLP:' + rec['key']
 
 
-def dblp_bibtex(rec, xref, o, key=None):
-    """Full pipeline for a dblp record: generated entry, substitutions, LaTeX, custom rules."""
+def dblp_bibtex(rec, xref, o, key=None, spellings=None):
+    """Full pipeline for a dblp record: generated entry, substitutions, LaTeX, custom rules.
+
+    spellings: {fold_name(name): name}, preferred spellings of names (see name_spellings)."""
     e = from_dblp(rec, xref)
     e['key'] = key or make_key(rec, o['key_style'])
+    if spellings:
+        e['fields'] = [(k, [spellings.get(fold_name(n), n) for n in v] if k in ('author', 'editor') else v)
+                       for k, v in e['fields']]
     e = apply_rules(to_latex(transform(e, o), o), o)
     return e
 
@@ -478,3 +484,70 @@ def normalize_foreign(entry, o):
     e = dict(entry, plain=False, acronym=None,
              year=next((v for k, v in entry['fields'] if k == 'year'), None))
     return apply_rules(transform(e, o), o)
+
+
+# --------------------------------------------------------------------------- names from .bib files
+
+LATEX_SYMBOLS = {'o': 'ø', 'O': 'Ø', 'ss': 'ß', 'l': 'ł', 'L': 'Ł', 'ae': 'æ', 'AE': 'Æ', 'oe': 'œ', 'OE': 'Œ',
+                 'aa': 'å', 'AA': 'Å', 'i': 'ı', 'j': 'ȷ', 'dj': 'đ', 'DJ': 'Đ', 'th': 'þ', 'TH': 'Þ', 'dh': 'ð', 'DH': 'Ð'}
+LATEX_ACCENTS = {cmd: mark for mark, cmd in ACCENTS.items()}
+
+
+def latex_to_unicode(s):
+    """Sr{\\dj}an Krsti{\\'c}, Sr\\dj{}an Krsti\\'{c} -> Srđan Krstić (for the usual accent commands)."""
+    s = re.sub(r'\\(%s)(?![A-Za-z])\s*(?:\{\})?' % '|'.join(sorted(LATEX_SYMBOLS, key=len, reverse=True)),
+               lambda m: LATEX_SYMBOLS[m.group(1)], s)
+    accent = lambda m: (m.group(2) or m.group(3)).replace('ı', 'i').replace('ȷ', 'j') + LATEX_ACCENTS[m.group(1)]
+    for _ in range(3):                                   # nested accents
+        s = re.sub(r"""\\([`'^"~=.])\s*(?:\{\s*([^{}\\])\s*\}|([^\s{}\\]))""", accent, s)
+        s = re.sub(r'\\([uvHcdkrb])(?:\s*\{\s*([^{}\\])\s*\}|\s+([^\s{}\\]))', accent, s)
+    s = re.sub(r'(?<!\\)~', ' ', s.replace('{', '').replace('}', ''))
+    return unicodedata.normalize('NFC', re.sub(r'\s+', ' ', s)).strip()
+
+
+def fold_name(name):
+    """A name without accents, case and punctuation, for comparing spellings: Srđan Krstić -> srdankrstic."""
+    s = unicodedata.normalize('NFKD', strip_number(name))
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    for a, b in (('đ', 'd'), ('Đ', 'd'), ('ð', 'd'), ('ø', 'o'), ('Ø', 'o'), ('ł', 'l'), ('Ł', 'l'), ('æ', 'ae'),
+                 ('œ', 'oe'), ('ß', 'ss'), ('ı', 'i'), ('þ', 'th')):
+        s = s.replace(a, b)
+    return re.sub(r'[^a-z]', '', s.lower())
+
+
+def split_names(value):
+    """The names of a BibTeX author/editor field (split at 'and' outside braces)."""
+    names, depth, start = [], 0, 0
+    for m in re.finditer(r'[{}]|\s+and\s+', value):
+        if m.group(0) == '{':
+            depth += 1
+        elif m.group(0) == '}':
+            depth -= 1
+        elif depth == 0:
+            names.append(value[start:m.start()])
+            start = m.end()
+    names.append(value[start:])
+    return [n.strip() for n in names if n.strip() and n.strip().lower() != 'others']
+
+
+def plain_name(bibname):
+    """A BibTeX name as "First Last" in Unicode: Krsti{\\'c}, Sr{\\dj}an -> Srđan Krstić."""
+    parts = [p.strip() for p in latex_to_unicode(bibname).split(',')]
+    if len(parts) == 2:
+        return f'{parts[1]} {parts[0]}'.strip()
+    if len(parts) == 3:
+        return f'{parts[2]} {parts[0]} {parts[1]}'.strip()
+    return parts[0]
+
+
+def name_spellings(entries):
+    """{fold_name(name): name} for the names with accents in parsed .bib entries."""
+    out = {}
+    for e in entries:
+        for k, v in e['fields']:
+            if k in ('author', 'editor') and isinstance(v, str):
+                for n in split_names(v):
+                    p = plain_name(n)
+                    if any(ord(c) > 127 for c in p) and fold_name(p):
+                        out.setdefault(fold_name(p), p)
+    return out

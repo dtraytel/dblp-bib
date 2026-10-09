@@ -87,6 +87,23 @@ the Isabelle/HOL Theories.</title>
 <journal>J. Test</journal>
 <ee>https://example.org/erdos99</ee>
 </article>
+<article mdate="2022-01-01" key="journals/test/KrsticT22">
+<author orcid="0000-0001-8314-2589">Srdan Krstic</author>
+<author>Dmitriy Traytel</author>
+<title>Monitoring Without Accents.</title>
+<pages>1-20</pages>
+<year>2022</year>
+<volume>4</volume>
+<journal>J. Test</journal>
+<ee>https://doi.org/10.1234/test.2022</ee>
+</article>
+<article mdate="2023-01-01" key="journals/test/KrsticB23">
+<author>Srdan Krstic</author>
+<author>David Basin</author>
+<title>Another Paper.</title>
+<year>2023</year>
+<journal>J. Test</journal>
+</article>
 <www mdate="2020-01-01" key="homepages/00/1">
 <author>Some Person</author>
 <title>Home Page</title>

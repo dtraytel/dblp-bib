@@ -145,6 +145,10 @@ class App:
     def render(self, items, opts):
         o = bibgen.opts_with_defaults(opts)
         out, used = [], {}
+        spellings = {}
+        if o['keep_name_spellings']:                # names dblp writes without accents: as in the loaded .bib file
+            texts = [it['raw'] for it in items if it.get('kind') == 'raw'] + [it['orig'] for it in items if it.get('orig')]
+            spellings = bibgen.name_spellings(p for t in texts for p in bibparse.parse(t) if p['kind'] == 'entry')
         with closing(self.db.connect()) as con:
             for it in items:
                 r = {'id': it.get('id'), 'kind': it.get('kind')}
@@ -154,7 +158,7 @@ class App:
                         if rec is None:
                             r.update(text=f"% dblp record {it['dblp']} not found in the database", error='not found')
                         else:
-                            e = bibgen.dblp_bibtex(rec, xref, o, it.get('key') or None)
+                            e = bibgen.dblp_bibtex(rec, xref, o, it.get('key') or None, spellings)
                             if not it.get('key'):
                                 e['key'] = unique_key(e['key'], used)
                             used[e['key']] = True
@@ -177,7 +181,7 @@ class App:
                             if it.get('match'):
                                 rec, xref = self.record_with_xref(it['match'], con)
                                 if rec:
-                                    alt = bibgen.dblp_bibtex(rec, xref, o, e['key'] if o['keep_keys'] else None)
+                                    alt = bibgen.dblp_bibtex(rec, xref, o, e['key'] if o['keep_keys'] else None, spellings)
                                     r['alt'] = {'text': bibgen.render(alt), 'key': alt['key'], 'type': alt['type'],
                                                 'fields': alt['fields'], 'record': summary(rec),
                                                 'same': same_entry(e, alt)}
