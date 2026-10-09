@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE dblp SYSTEM "dblp.dtd">
+<dblp>
+<proceedings mdate="2025-11-21" key="conf/itp/2019">
+<editor>John Harrison 0001</editor>
+<editor>John O'Leary</editor>
+<editor>Andrew Tolmach</editor>
+<title>10th International Conference on Interactive Theorem Proving, ITP 2019, Portland, OR, USA, September 9-12, 2019</title>
+<booktitle>ITP</booktitle>
+<publisher>Schloss Dagstuhl - Leibniz-Zentrum f&uuml;r Informatik</publisher>
+<year>2019</year>
+<series href="db/series/lipics/index.html">LIPIcs</series>
+<volume>141</volume>
+<isbn>978-3-95977-122-1</isbn>
+<ee type="oa">http://www.dagstuhl.de/dagpub/978-3-95977-122-1</ee>
+<url>db/conf/itp/itp2019.html</url>
+</proceedings>
+<inproceedings mdate="2019-11-01" key="conf/itp/BrunT19">
+<author>Matthias Brun 0002</author>
+<author orcid="0000-0001-7982-2768">Dmitriy Traytel</author>
+<title>Generic Authenticated Data Structures, Formally.</title>
+<pages>10:1-10:18</pages>
+<year>2019</year>
+<booktitle>ITP</booktitle>
+<ee type="oa">https://doi.org/10.4230/LIPIcs.ITP.2019.10</ee>
+<crossref>conf/itp/2019</crossref>
+<url>db/conf/itp/itp2019.html#BrunT19</url>
+</inproceedings><inproceedings mdate="2020-08-06" key="conf/cade/FurerLST20">
+<author>Basil F&uuml;rer</author>
+<author orcid="0000-0002-5851-494X">Andreas Lochbihler</author>
+<author orcid="0000-0001-8253-4513">Joshua Schneider 0001</author>
+<author orcid="0000-0001-7982-2768">Dmitriy Traytel</author>
+<title>Quotients of Bounded Natural Functors.</title>
+<pages>58-78</pages>
+<year>2020</year>
+<booktitle>IJCAR (2)</booktitle>
+<ee>https://doi.org/10.1007/978-3-030-51054-1_4</ee>
+<crossref>conf/cade/2020-2</crossref>
+<url>db/conf/cade/ijcar2020-2.html#FurerLST20</url>
+</inproceedings>
+<proceedings mdate="2020-07-03" key="conf/cade/2020-2">
+<editor>Nicolas Peltier</editor>
+<editor>Viorica Sofronie-Stokkermans</editor>
+<title>Automated Reasoning - 10th International Joint Conference, IJCAR 2020, Paris, France, July 1-4, 2020, Proceedings, Part II</title>
+<booktitle>IJCAR (2)</booktitle>
+<publisher>Springer</publisher>
+<year>2020</year>
+<series href="db/series/lncs/index.html">Lecture Notes in Computer Science</series>
+<volume>12167</volume>
+<isbn>978-3-030-51053-4</isbn>
+<ee>https://doi.org/10.1007/978-3-030-51054-1</ee>
+<url>db/conf/cade/ijcar2020-2.html</url>
+</proceedings>
+<article mdate="2021-04-19" key="journals/corr/abs-2104-05348" publtype="informal">
+<author>Basil F&uuml;rer</author>
+<author>Andreas Lochbihler</author>
+<author>Joshua Schneider 0001</author>
+<author>Dmitriy Traytel</author>
+<title>Quotients of Bounded Natural Functors.</title>
+<year>2021</year>
+<volume>abs/2104.05348</volume>
+<journal>CoRR</journal>
+<ee type="oa">https://arxiv.org/abs/2104.05348</ee>
+<url>db/journals/corr/corr2104.html#abs-2104-05348</url>
+</article>
+<article mdate="2023-07-07" key="journals/lmcs/FurerLST22">
+<author>Basil F&uuml;rer</author>
+<author>Andreas Lochbihler</author>
+<author>Joshua Schneider 0001</author>
+<author>Dmitriy Traytel</author>
+<title>Quotients of Bounded Natural Functors.</title>
+<year>2022</year>
+<volume>18</volume>
+<journal>Log. Methods Comput. Sci.</journal>
+<number>1</number>
+<ee type="oa">https://doi.org/10.46298/lmcs-18(1:23)2022</ee>
+<url>db/journals/lmcs/lmcs18.html#FurerLST22</url>
+</article>
+<article mdate="2020-01-01" key="journals/test/Erdos99">
+<author>Paul Erd&#337;s</author>
+<author>Jan van den Br&uuml;gge</author>
+<title>On <i>L</i><sub>1</sub>-Distances &amp; 100% of
+the Isabelle/HOL Theories.</title>
+<pages>1-10</pages>
+<year>1999</year>
+<volume>3</volume>
+<journal>J. Test</journal>
+<ee>https://example.org/erdos99</ee>
+</article>
+<www mdate="2020-01-01" key="homepages/00/1">
+<author>Some Person</author>
+<title>Home Page</title>
+</www>
+</dblp>
