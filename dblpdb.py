@@ -4,6 +4,7 @@ The dump (https://dblp.org/xml/dblp.xml.gz) is ISO-8859-1 with HTML entities; it
 line, like the dblp tools do, which is much faster than a full XML parser and needs no DTD.
 """
 
+import calendar
 import gzip
 from contextlib import closing
 import html
@@ -175,19 +176,37 @@ def download(dest, progress=None):
                 progress('download', got / total if total else 0.0, f'{got / 2**20:,.0f} of {total / 2**20:,.0f} MB')
         lm = r.headers.get('Last-Modified')
     os.replace(tmp, dest)
-    if lm:
-        t = time.mktime(time.strptime(lm, '%a, %d %b %Y %H:%M:%S GMT')) - time.timezone
+    t = _http_time(lm)
+    if t:
         os.utime(dest, (t, t))
     return dest
+
+
+def _http_time(value):
+    """Seconds since the epoch for an HTTP date (always GMT)."""
+    try:
+        return calendar.timegm(time.strptime(value, '%a, %d %b %Y %H:%M:%S GMT')) if value else None
+    except ValueError:
+        return None
 
 
 def remote_info():
     """Last-Modified and size of the dump on dblp.org."""
     req = urllib.request.Request(DUMP_URL, method='HEAD', headers={'User-Agent': 'dblp-bib-tool'})
     with urllib.request.urlopen(req, timeout=20) as r:
-        lm = r.headers.get('Last-Modified')
-        t = time.mktime(time.strptime(lm, '%a, %d %b %Y %H:%M:%S GMT')) - time.timezone if lm else None
-        return {'modified': int(t) if t else None, 'size': int(r.headers.get('Content-Length') or 0)}
+        return {'modified': _http_time(r.headers.get('Last-Modified')), 'size': int(r.headers.get('Content-Length') or 0)}
+
+
+def is_current(mtime, size, remote):
+    """Whether a dump with this modification time and size is the one on dblp.org (or a newer one).
+
+    An hour of slack: earlier versions of this tool stored the time off by the daylight-saving offset."""
+    if not mtime or not remote.get('modified'):
+        return False
+    mtime = int(mtime)
+    if mtime > remote['modified'] + 3600:
+        return True
+    return abs(mtime - remote['modified']) <= 3600 and int(size or 0) == remote.get('size')
 
 
 # --------------------------------------------------------------------------- queries

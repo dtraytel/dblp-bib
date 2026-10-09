@@ -29,7 +29,7 @@ A dblp-like web interface to a local copy of the [dblp](https://dblp.org) dump, 
   - optionally apply the substitutions to entries that do not come from dblp, too
   - custom regular-expression rules per field
 - **Data**: shows the date of the dump the index was built from, checks dblp.org for a newer dump,
-  downloads it and rebuilds the index in the background (search keeps working on the old index meanwhile).
+  downloads it only if there is one, and rebuilds the index in the background (search keeps working on the old index meanwhile).
   
 ## Background
 
@@ -60,7 +60,8 @@ the dump and build one. From the command line:
 ./dblp-bib.py update
 ```
 
-downloads the current dump and builds the index (about 4 minutes after the download);
+downloads the current dump and builds the index (about 4 minutes after the download) — but only if
+dblp.org has a newer dump than the one the index is built from (`--force` downloads it anyway);
 `./dblp-bib.py build` rebuilds it from the dump already in `data/`. To use a copy of the dump you
 already have instead of downloading one, pass it once with `./dblp-bib.py build --dump FILE`
 (the path is not stored), or copy it to `data/dblp.xml.gz`.

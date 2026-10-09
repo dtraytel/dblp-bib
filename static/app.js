@@ -765,10 +765,11 @@ async function drawData() {
         <dt>Indexed</dt><dd>${fmtTime(db.built)} (${Math.round(db.build_seconds / 60)} min)</dd></dl>`
       : '<p>No database yet: download the dump below.</p>'}</div>
     <div class="card"><h2>Update</h2>
-      <p style="margin-top:0">Download the current dump from dblp.org (about 1 GB) and rebuild the index (about 5 minutes;
-      the database needs about 6 GB, twice that while rebuilding). Search keeps working on the old data meanwhile.</p>
+      <p style="margin-top:0">Downloads the current dump from dblp.org (about 1 GB) — only if it is newer than the one your
+      database is built from — and rebuilds the index (about 5 minutes; the database needs about 6 GB, twice that while
+      rebuilding). Search keeps working on the old data meanwhile.</p>
       <div class="toolbar"><button class="btn" id="checkRemote">Check dblp.org for a newer dump</button>
-        <button class="btn primary" id="download" ${job.running ? 'disabled' : ''}>Download and rebuild</button></div>
+        <button class="btn primary" id="download" ${job.running ? 'disabled' : ''}>Update if newer</button></div>
       <div id="remote" class="muted"></div>
       ${STATUS.dump ? `<h3>Rebuild without downloading</h3>
       <p class="muted" style="margin-top:0">From the dump downloaded earlier (${fmtDate(STATUS.dump.mtime)}, ${(STATUS.dump.size / 2 ** 20).toFixed(0)} MB).</p>
@@ -793,8 +794,8 @@ function drawJob(job) {
   const el = $('#jobcard');
   if (!el) return;
   if (!job || !job.phase) { el.innerHTML = '<h2>Status</h2><p class="muted">No update has run since the server started.</p>'; return; }
-  const label = { start: 'Starting', download: 'Downloading', import: 'Reading the dump', index: 'Building the search index', done: 'Finished', error: 'Failed' }[job.phase] || job.phase;
-  el.innerHTML = `<h2>Status</h2><p style="margin:0"><b>${label}</b> ${job.running ? '' : job.phase === 'done' ? '✓' : ''}</p>
+  const label = { start: 'Starting', check: 'Checking dblp.org', current: 'Already up to date', download: 'Downloading', import: 'Reading the dump', index: 'Building the search index', done: 'Finished', error: 'Failed' }[job.phase] || job.phase;
+  el.innerHTML = `<h2>Status</h2><p style="margin:0"><b>${label}</b> ${job.running ? '' : ['done', 'current'].includes(job.phase) ? '✓' : ''}</p>
     ${job.running ? `<div class="progress"><div style="width:${(job.phase === 'index' ? 100 : job.frac * 100).toFixed(1)}%"></div></div>` : ''}
     <p class="${job.phase === 'error' ? 'err' : 'muted'}">${esc(job.msg || '')}${job.running && job.phase === 'index' ? ' (no progress reported for this step)' : ''}</p>
     ${job.started ? `<p class="muted" style="font-size:12.5px">Started ${fmtTime(job.started)}${job.finished ? `, finished ${fmtTime(job.finished)}` : ''}</p>` : ''}`;
@@ -816,7 +817,7 @@ async function pollJob() {
   if (current === 'data') drawJob(st.job);
   checkBanner();
   if (st.job.running) setTimeout(pollJob, 1000);
-  else if (wasRunning) { if (current === 'data') drawData(); renderDoc(); toast(st.job.phase === 'done' ? 'The database has been rebuilt' : 'Update failed', st.job.phase !== 'done'); }
+  else if (wasRunning) { if (current === 'data') drawData(); renderDoc(); toast({ done: 'The database has been rebuilt', current: 'Already up to date: nothing was downloaded' }[st.job.phase] || 'Update failed', !['done', 'current'].includes(st.job.phase)); }
 }
 
 function checkBanner() {

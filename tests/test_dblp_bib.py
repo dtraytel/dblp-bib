@@ -260,9 +260,19 @@ class UpdateJob(unittest.TestCase):
         os.makedirs(www)
         with open(FIXTURE, 'rb') as src, gzip.open(os.path.join(www, 'dblp.xml.gz'), 'wb') as dst:
             dst.write(src.read())
-        handler = lambda *a, **kw: SimpleHTTPRequestHandler(*a, directory=www, **kw)
-        SimpleHTTPRequestHandler.log_message = lambda *a: None
-        srv = ThreadingHTTPServer(('127.0.0.1', 0), handler)
+        gets = []
+
+        class Handler(SimpleHTTPRequestHandler):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, directory=www, **kw)
+
+            def do_GET(self):
+                gets.append(self.path)
+                super().do_GET()
+
+            def log_message(self, *a):
+                pass
+        srv = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         old = dblpdb.DUMP_URL
         dblpdb.DUMP_URL = f'http://127.0.0.1:{srv.server_address[1]}/dblp.xml.gz'
@@ -291,6 +301,40 @@ class UpdateJob(unittest.TestCase):
             self.assertEqual(app.dump_info()['name'], 'dblp.xml.gz')
             self.assertEqual(run('rebuild')['phase'], 'done')                   # from the downloaded dump
             self.assertEqual(dblpdb.remote_info()['size'], os.path.getsize(os.path.join(www, 'dblp.xml.gz')))
+            # the file's date is the server's Last-Modified, in UTC
+            self.assertEqual(app.dump_info()['mtime'], int(os.path.getmtime(os.path.join(www, 'dblp.xml.gz'))))
+            self.assertEqual(len(gets), 1)
+
+            # unchanged on the server: nothing is downloaded or rebuilt
+            built = app.db.meta()['built']
+            self.assertEqual(run('download')['phase'], 'current', app.job)
+            self.assertEqual((len(gets), app.db.meta()['built']), (1, built))
+            # ... also with a date stored off by an hour by earlier versions
+            self.assertTrue(dblpdb.is_current(int(app.db.meta()['source_mtime']) - 3600, app.db.meta()['source_size'],
+                                              dblpdb.remote_info()))
+            # ... but the database is rebuilt from the dump already there if it is missing
+            os.remove(app.db.path)
+            self.assertEqual(run('download')['phase'], 'done', app.job)
+            self.assertEqual(len(gets), 1)
+            self.assertEqual(app.db.meta()['records'], '7')
+            # force downloads anyway
+            self.assertTrue(app.start_job('download', force=True))
+            for _ in range(100):
+                if not app.job['running']:
+                    break
+                time.sleep(0.1)
+            self.assertEqual((app.job['phase'], len(gets)), ('done', 2))
+            # a newer dump on the server is downloaded
+            later = time.time() + 86400
+            os.utime(os.path.join(www, 'dblp.xml.gz'), (later, later))
+            self.assertEqual(run('download')['phase'], 'done', app.job)
+            self.assertEqual(len(gets), 3)
+
+            # no connection: a readable error, not a traceback
+            dblpdb.DUMP_URL = 'http://nonexistent.invalid/dblp.xml.gz'
+            job = run('download')
+            self.assertEqual(job['phase'], 'error')
+            self.assertIn('cannot reach dblp.org', job['msg'])
         finally:
             dblpdb.DUMP_URL = old
             srv.shutdown()

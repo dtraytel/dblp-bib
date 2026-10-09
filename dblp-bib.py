@@ -2,7 +2,7 @@
 """dblp-bib: a dblp-like web interface to a local dblp dump for clicking together .bib files.
 
   ./dblp-bib.py                         start the web interface (http://127.0.0.1:8737)
-  ./dblp-bib.py update                  download the current dump from dblp.org into the data directory and build the database
+  ./dblp-bib.py update                  download the dump from dblp.org into the data directory, if it changed, and build the database
   ./dblp-bib.py build                   rebuild the database from the dump in the data directory
   ./dblp-bib.py build --dump FILE       build the database from another copy of the dump (dblp.xml or dblp.xml.gz)
 """
@@ -22,6 +22,7 @@ import threading
 import time
 import traceback
 import unicodedata
+import urllib.error
 import urllib.parse
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -76,26 +77,52 @@ class App:
         st = os.stat(p)
         return {'name': os.path.basename(p), 'mtime': int(st.st_mtime), 'size': st.st_size}
 
-    def start_job(self, mode):
+    def update(self, progress, force=False):
+        """Download the dump if dblp.org has a newer one than the database's, and rebuild the database.
+
+        Returns 'current' if the database is already built from the current dump, else 'built'."""
+        try:
+            remote = dblpdb.remote_info()
+            meta = self.db.meta() if self.db.exists() else {}
+            if not force and dblpdb.is_current(meta.get('source_mtime'), meta.get('source_size'), remote):
+                return 'current'
+            local = self.dump_info()
+            if force or not (local and dblpdb.is_current(local['mtime'], local['size'], remote)):
+                dblpdb.download(os.path.join(self.data, 'dblp.xml.gz'), progress)
+        except urllib.error.URLError as e:
+            raise ConnectionError(f'cannot reach dblp.org ({getattr(e, "reason", e)}); check the internet connection') from None
+        dblpdb.build(self.local_dump(), self.db.path, progress)
+        return 'built'
+
+    def start_job(self, mode, force=False):
         with self.lock:
             if self.job.get('running'):
                 return False
             self.job = {'running': True, 'phase': 'start', 'frac': 0.0, 'msg': 'starting', 'started': time.time(), 'mode': mode}
-        threading.Thread(target=self._run_job, args=(mode,), daemon=True).start()
+        threading.Thread(target=self._run_job, args=(mode, force), daemon=True).start()
         return True
 
     def _progress(self, phase, frac, msg):
         self.job.update(phase=phase, frac=frac, msg=msg)
 
-    def _run_job(self, mode):
+    def _run_job(self, mode, force=False):
         try:
             if mode == 'download':
-                dblpdb.download(os.path.join(self.data, 'dblp.xml.gz'), self._progress)
-            path = self.local_dump()
-            if not path:
-                raise FileNotFoundError('no dump in the data directory; download one first')
-            dblpdb.build(path, self.db.path, self._progress)
+                self._progress('check', 0.0, 'asking dblp.org for the date of the current dump')
+                if self.update(self._progress, force) == 'current':
+                    self.job.update(running=False, phase='current', frac=1.0, finished=time.time(),
+                                    msg='The database is built from the current dump on dblp.org; nothing was downloaded.')
+                    return
+            else:
+                path = self.local_dump()
+                if not path:
+                    raise FileNotFoundError('no dump in the data directory; download one first')
+                dblpdb.build(path, self.db.path, self._progress)
             self.job.update(running=False, phase='done', frac=1.0, finished=time.time())
+        except ConnectionError as e:                # no traceback for network trouble
+            self.job.update(running=False, phase='error', msg=f'Download failed: {e}')
+        except FileNotFoundError as e:
+            self.job.update(running=False, phase='error', msg=str(e))
         except Exception as e:
             traceback.print_exc()
             self.job.update(running=False, phase='error', msg=f'{type(e).__name__}: {e}')
@@ -440,7 +467,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, {'error': 'mode must be download or rebuild'})
                 if mode == 'rebuild' and not app.local_dump():
                     return self._send(400, {'error': 'no dump in the data directory; download one first'})
-                ok = app.start_job(mode)
+                ok = app.start_job(mode, bool(body.get('force')))
                 return self._send(200 if ok else 409, {'ok': ok, 'job': app.job})
             return self._send(404, {'error': 'unknown endpoint'})
         except FileNotFoundError as e:
@@ -476,6 +503,7 @@ def main():
     ap.add_argument('--data', default=os.environ.get('DBLPBIB_DATA', os.path.join(HERE, 'data')),
                     help='directory for the database and state (default: ./data)')
     ap.add_argument('--dump', metavar='FILE', help='build: use this dump instead of the one in the data directory')
+    ap.add_argument('--force', action='store_true', help='update: download the dump even if it has not changed')
     ap.add_argument('--port', type=int, default=int(os.environ.get('PORT') or 8737), help='default: $PORT or 8737')
     ap.add_argument('--no-browser', action='store_true')
     args = ap.parse_args()
@@ -489,9 +517,14 @@ def main():
                 print(f'\r{phase}: {frac * 100:5.1f}%  {msg}'.ljust(70), end='' if phase in ('import', 'download') else '\n',
                       file=sys.stderr, flush=True)
         if args.command == 'update':
-            dump = dblpdb.download(os.path.join(args.data, 'dblp.xml.gz'), progress)
-        else:
-            dump = args.dump or app.local_dump()
+            try:
+                if app.update(progress, args.force) == 'current':
+                    print('dblp-bib: the database is built from the current dump on dblp.org; nothing to do '
+                          '(--force downloads it anyway)', file=sys.stderr)
+            except ConnectionError as e:
+                sys.exit(f'dblp-bib: {e}')
+            return
+        dump = args.dump or app.local_dump()
         if not dump:
             sys.exit('no dump in the data directory: use "update" to download one, or "build --dump FILE"')
         dblpdb.build(dump, app.db.path, progress)
