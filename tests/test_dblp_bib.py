@@ -269,10 +269,30 @@ class Database(unittest.TestCase):
   bibsource = {dblp}
 }'''
         item = {'id': 1, 'kind': 'raw', 'raw': raw}
-        self.assertEqual(self.render([item])['items'][0]['text'], raw)            # off by default
-        f = dict(self.render([item], normalize_foreign=True)['items'][0]['fields'])
-        self.assertEqual(f, {'booktitle': 'ACM SIGPLAN Conference on Certified Programs and Proofs, {CPP} 2019',
-                             'series': 'LNCS', 'doi': '10.1145/1'})
+        normalized = {'booktitle': 'ACM SIGPLAN Conference on Certified Programs and Proofs, {CPP} 2019',
+                      'series': 'LNCS', 'doi': '10.1145/1'}
+        r = self.render([item])['items'][0]
+        self.assertEqual(r['text'], raw)                                          # off by default: not written ...
+        self.assertEqual(dict(r['subst']['fields']), normalized)                  # ... but reported as pending
+        r = self.render([item], normalize_foreign=True)['items'][0]
+        self.assertEqual(r['text'], r['subst']['text'])
+        self.assertEqual(dict(r['subst']['fields']), normalized)
+        self.assertEqual(dict(r['fields'])['series'], 'Lecture Notes in Computer Science')   # the file version
+        r = self.render([{'id': 1, 'kind': 'raw', 'raw': r['subst']['text']}])['items'][0]
+        self.assertNotIn('subst', r)                                              # applied: nothing pending
+
+    def test_outdated_without_substitution(self):
+        rule = 'author: (?<!\\{)Huerta y Munive => {Huerta y Munive}'
+        gen = self.render([{'id': 1, 'kind': 'dblp', 'dblp': 'conf/itp/BrunT19', 'key': 'k'}])['items'][0]['text']
+        for opts in ({}, {'normalize_foreign': True}):
+            item = {'id': 1, 'kind': 'raw', 'raw': gen, 'match': 'conf/itp/BrunT19'}
+            self.assertTrue(self.render([item], **opts)['items'][0]['alt']['same'], opts)
+            r = self.render([item], custom_rules='author: Brun => {Brun}', **opts)['items'][0]
+            self.assertFalse(r['alt']['same'], opts)                              # the file lacks the substitution
+        manual = "@misc{hm, author = {Jonathan Juli{\\'{a}}n Huerta y Munive}, title = {Talk}, year = 2020}"
+        r = self.render([{'id': 2, 'kind': 'raw', 'raw': manual}], custom_rules=rule)['items'][0]
+        self.assertEqual(dict(r['subst']['fields'])['author'], "Jonathan Juli{\\'{a}}n {Huerta y Munive}")
+        self.assertEqual(r['text'], manual)
 
 
 class UpdateJob(unittest.TestCase):

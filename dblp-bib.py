@@ -172,11 +172,13 @@ class App:
                         else:
                             used[e['key']] = True
                             text = it['raw']
-                            if o['normalize_foreign']:
-                                ne = bibgen.normalize_foreign(e, o)
-                                if ne['fields'] != e['fields']:
-                                    text = bibgen.render(ne)
-                                    e = dict(e, fields=ne['fields'])
+                            # what the substitutions would change; written out only if they apply to all entries
+                            ne = bibgen.normalize_foreign(e, o)
+                            if ne['fields'] != e['fields']:
+                                r['subst'] = {'text': bibgen.render(ne), 'key': e['key'], 'type': e['type'], 'fields': ne['fields']}
+                                if o['normalize_foreign']:
+                                    text = r['subst']['text']
+                            # fields: the entry as in the file, which is what is compared with dblp
                             r.update(text=text, key=e['key'], type=e['type'], fields=e['fields'])
                             if it.get('match'):
                                 rec, xref = self.record_with_xref(it['match'], con)

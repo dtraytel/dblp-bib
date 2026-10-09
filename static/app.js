@@ -378,12 +378,14 @@ function statusOf(i) {
     if (r.upgrade?.length) s.push(['up', 'published version available']);
     return s;
   }
-  if (r.alt?.same) return ['same', 'up to date with dblp'];
-  if (r.alt) return ['diff', 'differs from dblp'];
-  if (i.candidates?.length) return ['diff', 'possible matches'];
-  if (i.checked) return ['none', 'not found in dblp'];
-  return ['plain', 'not checked'];
+  const s = [r.alt?.same ? ['same', 'up to date with dblp'] : r.alt ? ['diff', 'differs from dblp']
+    : i.candidates?.length ? ['diff', 'possible matches'] : i.checked ? ['none', 'not found in dblp'] : ['plain', 'not checked']];
+  if (pendingSubst(i)) s.push(['diff', S.options.normalize_foreign ? 'substitutions applied' : 'substitutions not applied']);
+  else if (i.orig) s.push(['dblp', 'substitutions applied']);
+  return s;
 }
+// substitutions that would change an entry from the file (with a dblp match, the dblp version covers them)
+function pendingSubst(i) { const r = R[i.id]; return i.kind === 'raw' && r?.subst && !r.alt; }
 function badges(i) {
   let s = statusOf(i);
   if (!Array.isArray(s[0])) s = [s];
@@ -433,6 +435,8 @@ function itemHTML(i) {
   let acts = '';
   if (i.kind === 'raw') {
     if (r.alt && !r.alt.same) acts += `<button class="btn small primary" data-it="use">Use dblp version</button>`;
+    if (pendingSubst(i) && !S.options.normalize_foreign) acts += `<button class="btn small primary" data-it="subst">Apply substitutions</button>`;
+    if (i.orig) acts += `<button class="btn small" data-it="revert">Revert</button>`;
     if (!i.checked) acts += `<button class="btn small" data-it="check">Check dblp</button>`;
   }
   if (i.kind === 'dblp' && i.orig) acts += `<button class="btn small" data-it="revert">Revert</button>`;
@@ -441,6 +445,8 @@ function itemHTML(i) {
   let details = '';
   if (open) {
     if (i.kind === 'raw' && r.alt) details += diffTable(r, r.alt, 'in your file', 'from dblp (with your options)');
+    else if (pendingSubst(i)) details += diffTable(r, r.subst, 'in your file', 'with the substitutions');
+    else if (i.kind === 'raw' && i.orig && i.origParsed && r.fields) details += diffTable(i.origParsed, r, 'originally in your file', 'now');
     else if (i.kind === 'dblp' && i.orig && i.origParsed && r.fields) details += diffTable(i.origParsed, r, 'originally in your file', 'now');
     else details += `<pre class="bibtex">${esc(r.text || i.raw || '')}</pre>`;
     if (i.kind === 'dblp' && r.upgrade?.length) details += `<div class="cands"><b>Published versions:</b>${r.upgrade.map(u => `<div>${esc(u.venue)} ${u.year}: ${esc(u.title)} <span class="how">${esc(u.key)}</span></div>`).join('')}</div>`;
@@ -467,6 +473,7 @@ function drawBib() {
   const updatable = raw.filter(i => R[i.id]?.alt && !R[i.id].alt.same);
   const upgradable = items.filter(i => i.kind === 'dblp' && R[i.id]?.upgrade?.length);
   const unchecked = raw.filter(i => !i.checked);
+  const unsubst = raw.filter(pendingSubst);
   const scroll = window.scrollY;
   const focused = document.activeElement?.closest?.('.item')?.dataset.id;
   view().innerHTML = `<h1>Bibliography</h1>
@@ -489,10 +496,12 @@ function drawBib() {
     ${raw.length ? `<div class="card"><b>Entries from your file:</b> ${raw.length}
       <div class="summary">${unchecked.length ? `<button class="btn small" data-bib="check-all">Check ${unchecked.length} against dblp</button>` : ''}
       ${updatable.length ? `<button class="btn small primary" data-bib="update-all">Use the dblp version for all ${updatable.length} that differ</button>` : ''}
+      ${unsubst.length && !S.options.normalize_foreign ? `<button class="btn small primary" data-bib="subst-all">Apply the substitutions to ${unsubst.length === 1 ? 'the entry' : `all ${unsubst.length}`} without them</button>` : ''}
       <span class="st same">${raw.filter(i => R[i.id]?.alt?.same).length} up to date</span>
       <span class="st diff">${updatable.length} differ from dblp</span>
       <span class="st diff">${raw.filter(i => !R[i.id]?.alt && i.candidates?.length).length} uncertain</span>
-      <span class="st none">${raw.filter(i => i.checked && !i.candidates?.length).length} not in dblp</span></div>
+      <span class="st none">${raw.filter(i => i.checked && !i.candidates?.length).length} not in dblp</span>
+      ${unsubst.length ? `<span class="st diff">${unsubst.length} without the substitutions${S.options.normalize_foreign ? ' (applied when saving)' : ''}</span>` : ''}</div>
       <span class="muted" style="font-size:12.5px">Updated entries keep their citation keys${S.options.keep_keys ? '' : ' — currently off in Options'}; “Revert” restores the original text.</span></div>` : ''}
     ${upgradable.length ? `<div class="card"><span class="st up">${upgradable.length} preprint${upgradable.length > 1 ? 's have' : ' has'} a published version</span>
       <button class="btn small primary" data-bib="upgrade-all">Use the published versions</button></div>` : ''}
@@ -525,8 +534,10 @@ document.addEventListener('click', async e => {
   if (act === 'toggle') { OPEN.has(i.id) ? OPEN.delete(i.id) : OPEN.add(i.id); drawBib(); return; }
   if (act === 'remove') { S.doc.items = S.doc.items.filter(x => x !== i); changed(); drawBib(); return; }
   if (act === 'use') useDblp(i);
+  if (act === 'subst') applySubst(i);
   if (act === 'revert') {
-    if (i.prevDblp) { Object.assign(i, { dblp: i.prevDblp, key: i.prevKey || '' }); delete i.prevDblp; delete i.prevKey; }
+    if (i.kind === 'raw') i.raw = i.orig;
+    else if (i.prevDblp) { Object.assign(i, { dblp: i.prevDblp, key: i.prevKey || '' }); delete i.prevDblp; delete i.prevKey; }
     else { Object.assign(i, { kind: 'raw', raw: i.orig, match: i.dblp }); delete i.dblp; delete i.key; }
     delete i.orig; delete i.origParsed;
   }
@@ -553,9 +564,16 @@ function setKey(i, key) {
 function useDblp(i) {
   const r = R[i.id];
   if (!i.match || !r) return;
-  Object.assign(i, { kind: 'dblp', orig: i.raw, origParsed: { type: r.type, key: r.key, fields: r.fields }, dblp: i.match,
-                     key: S.options.keep_keys ? r.key : '' });
+  Object.assign(i, { kind: 'dblp', orig: i.orig || i.raw, origParsed: i.origParsed || { type: r.type, key: r.key, fields: r.fields },
+                     dblp: i.match, key: S.options.keep_keys ? r.key : '' });
   delete i.raw;
+}
+function applySubst(i) {
+  const r = R[i.id];
+  if (!pendingSubst(i)) return false;
+  if (!i.orig) { i.orig = i.raw; i.origParsed = { type: r.type, key: r.key, fields: r.fields }; }
+  i.raw = r.subst.text;
+  return true;
 }
 function upgrade(i) {
   const r = R[i.id];
@@ -650,6 +668,9 @@ async function bibAction(act, btn) {
     let n = 0;
     S.doc.items.forEach(i => { if (i.kind === 'raw' && R[i.id]?.alt && !R[i.id].alt.same) { useDblp(i); n++; } });
     toast(`Updated ${n} entries from dblp`); changed();
+  } else if (act === 'subst-all') {
+    const n = S.doc.items.filter(applySubst).length;
+    toast(`Applied the substitutions to ${n} entries`); changed();
   } else if (act === 'upgrade-all') {
     let n = 0;
     S.doc.items.forEach(i => { if (i.kind === 'dblp' && R[i.id]?.upgrade?.length) { upgrade(i); n++; } });
