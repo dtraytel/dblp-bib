@@ -292,6 +292,16 @@ class Database(unittest.TestCase):
         self.assertIn('series       = lncs # { Vol. 1},', r['subst']['text'])
         self.assertIn('month        = jan\n}', r['subst']['text'])
 
+    def test_duplicate_keys(self):
+        raw = '@misc{k, title = {x}}'
+        res = self.render([{'id': 1, 'kind': 'raw', 'raw': raw}, {'id': 2, 'kind': 'dblp', 'dblp': 'conf/itp/BrunT19', 'key': 'k'},
+                           {'id': 3, 'kind': 'raw', 'raw': '@misc{other, title = {y}}'}, {'id': 4, 'kind': 'other', 'raw': '% c'}])
+        self.assertEqual([x.get('duplicate') for x in res['items']], [2, 2, None, None])
+        # a generated key avoids keys from the file, also of entries further down
+        res = self.render([{'id': 1, 'kind': 'dblp', 'dblp': 'conf/itp/BrunT19'},
+                           {'id': 2, 'kind': 'raw', 'raw': '@misc{brun2019generic, title = {x}}'}], key_style='authoryear')
+        self.assertEqual([x['key'] for x in res['items']], ['brun2019genericb', 'brun2019generic'])
+
     def test_uniform_layout(self):
         raw = '''@InProceedings{x,
      author = "Hoare, C. A. R. and

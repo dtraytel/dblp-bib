@@ -49,7 +49,25 @@ async function renderDoc() {
     R = Object.fromEntries(res.items.map(x => [x.id, x]));
     BIB = res.bib;
   } catch (e) { toast(e.message, true); }
+  if (!CHECKING && removeDuplicates()) return;   // re-renders
   refreshDocViews();
+}
+
+// No two entries with the same citation key (BibTeX would silently use the first): keep the best copy of each.
+// Waits while entries are being checked against dblp, so that "matches dblp" can count.
+let CHECKING = 0;
+function removeDuplicates() {
+  const removed = [];
+  for (const group of duplicateGroups()) {
+    const keep = bestCopy(group);
+    group.forEach(i => { if (i !== keep) removed.push(i); });
+  }
+  if (!removed.length) return false;
+  const keys = [...new Set(removed.map(i => R[i.id].key))];
+  S.doc.items = S.doc.items.filter(i => !removed.includes(i));
+  toast(`Removed ${removed.length} repeated entr${removed.length === 1 ? 'y' : 'ies'} (kept one copy of ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? ', …' : ''})`);
+  changed();
+  return true;
 }
 const renderDocSoon = debounce(renderDoc, 150);
 
@@ -389,6 +407,7 @@ function pendingSubst(i) { const r = R[i.id]; return i.kind === 'raw' && r?.subs
 function badges(i) {
   let s = statusOf(i);
   if (!Array.isArray(s[0])) s = [s];
+  if (R[i.id]?.duplicate) s = [['none', `key used ${R[i.id].duplicate} times`], ...s];
   return s.map(([c, t]) => `<span class="st ${c}">${esc(t)}</span>`).join(' ');
 }
 
@@ -556,6 +575,11 @@ document.addEventListener('change', e => {
 
 function setKey(i, key) {
   if (!key) return;
+  if (Object.values(R).some(r => r.key === key && r.id !== i.id)) {
+    toast(`The key ${key} is already used by another entry`, true);
+    drawBib();                                     // shows the old key again
+    return;
+  }
   if (i.kind === 'dblp') i.key = key;
   else if (i.kind === 'raw') i.raw = i.raw.replace(/^(\s*@\s*\w+\s*[{(]\s*)[^,\s]*/, `$1${key}`);
   changed();
@@ -567,6 +591,16 @@ function useDblp(i) {
   Object.assign(i, { kind: 'dblp', orig: i.orig || i.raw, origParsed: i.origParsed || { type: r.type, key: r.key, fields: r.fields },
                      dblp: i.match, key: S.options.keep_keys ? r.key : '' });
   delete i.raw;
+}
+// items sharing a citation key, and the copy to keep: updated from dblp, then edited, then up to date, then the first
+function duplicateGroups() {
+  const by = {};
+  S.doc.items.forEach(i => { const r = R[i.id]; if (r?.duplicate) (by[r.key] ||= []).push(i); });
+  return Object.values(by).filter(g => g.length > 1);
+}
+function bestCopy(group) {
+  const rank = i => (i.kind === 'dblp' ? 4 : 0) + (i.orig ? 2 : 0) + (R[i.id]?.alt?.same ? 1 : 0);
+  return group.reduce((a, b) => rank(b) > rank(a) ? b : a);
 }
 function applySubst(i) {
   const r = R[i.id];
@@ -584,6 +618,10 @@ function upgrade(i) {
 }
 
 async function checkItems(items) {
+  CHECKING++;
+  try { await checkItemsNow(items); } finally { CHECKING--; }
+}
+async function checkItemsNow(items) {
   const raw = items.filter(i => i.kind === 'raw');
   for (let k = 0; k < raw.length; k += 25) {
     const chunk = raw.slice(k, k + 25);
@@ -599,12 +637,9 @@ async function openText(text, path) {
   let res;
   try { res = await api('parse', { text }); } catch (e) { toast(e.message, true); return; }
   const items = res.items.map(p => p.kind === 'entry' ? newItem({ kind: 'raw', raw: p.raw }) : newItem({ kind: 'other', raw: p.raw }));
-  let append = false;
-  if (S.doc.items.length) {
-    append = !confirm(`Replace the current bibliography (${S.doc.items.length} items) with this file?\n\nOK: replace · Cancel: append the entries instead`);
-  }
-  if (append) S.doc.items.push(...items);
-  else { S.doc.items = items; S.doc.path = path; OPEN.clear(); }
+  // opening a file always replaces the bibliography (entries can be added with "Paste BibTeX…")
+  if (S.doc.items.length && !confirm(`Replace the current bibliography (${S.doc.items.length} items) with this file?`)) return;
+  S.doc.items = items; S.doc.path = path; OPEN.clear();
   const errs = res.items.filter(p => p.error).length;
   toast(`Read ${items.filter(i => i.kind === 'raw').length} entries${errs ? `, ${errs} unparsable chunk(s) kept as text` : ''}; checking against dblp…`);
   changed();
@@ -655,11 +690,14 @@ async function bibAction(act, btn) {
   } else if (act === 'paste-add') {
     const text = $('#pastetext').value;
     const res = await api('parse', { text });
-    const items = res.items.map(p => newItem({ kind: p.kind === 'entry' ? 'raw' : 'other', raw: p.raw }));
+    const have = new Set(Object.values(R).map(r => r.key).filter(Boolean));
+    const fresh = res.items.filter(p => p.kind !== 'entry' || !have.has(p.key));
+    const items = fresh.map(p => newItem({ kind: p.kind === 'entry' ? 'raw' : 'other', raw: p.raw }));
     S.doc.items.push(...items);
     changed();
+    const skipped = res.items.length - fresh.length;
+    toast(`Added ${items.length} item(s)${skipped ? `; skipped ${skipped} whose citation key is already in the bibliography` : ''}`);
     await checkItems(items); changed();
-    toast(`Added ${items.length} item(s)`);
   } else if (act === 'clear') {
     if (confirm('Remove all entries from the bibliography? (The file on disk is not touched.)')) { S.doc.items = []; S.doc.path = ''; OPEN.clear(); changed(); }
   } else if (act === 'check-all') {

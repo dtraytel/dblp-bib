@@ -8,6 +8,7 @@
 """
 
 import argparse
+import collections
 from contextlib import closing
 import difflib
 import json
@@ -144,7 +145,14 @@ class App:
 
     def render(self, items, opts):
         o = bibgen.opts_with_defaults(opts)
-        out, used = [], {}
+        out = []
+        # keys given in the file or by the user: generated keys must not collide with any of them
+        used = dict.fromkeys(it['key'] for it in items if it.get('kind') == 'dblp' and it.get('key'))
+        for it in items:
+            if it.get('kind') == 'raw':
+                m = re.match(r'\s*@\s*\w+\s*[{(]\s*([^,\s]+)', it.get('raw') or '')
+                if m:
+                    used[m.group(1)] = True
         spellings = {}
         if o['keep_name_spellings']:                # names dblp writes without accents: as in the loaded .bib file
             texts = [it['raw'] for it in items if it.get('kind') == 'raw'] + [it['orig'] for it in items if it.get('orig')]
@@ -195,6 +203,10 @@ class App:
                     traceback.print_exc()
                     r.update(text=it.get('raw') or '', error=str(ex))
                 out.append(r)
+        counts = collections.Counter(x['key'] for x in out if x.get('key'))
+        for x in out:                               # BibTeX skips all but the first entry with a key
+            if counts[x.get('key')] > 1:
+                x['duplicate'] = counts[x['key']]
         bib = '\n\n'.join(x['text'].strip() for x in out if x.get('text', '').strip()) + '\n'
         return {'items': out, 'bib': bib}
 
