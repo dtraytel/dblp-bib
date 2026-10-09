@@ -37,6 +37,7 @@ DEFAULT_OPTIONS = {
     'key_style': 'dblp',            # dblp | short | authoryear
     'keep_keys': True,              # keep the keys of entries of a loaded .bib file when updating them from dblp
     'keep_name_spellings': True,    # names in a loaded .bib file that dblp writes without accents keep their spelling
+    'uniform_layout': False,        # write entries from a loaded .bib file in the same layout as the generated ones
     'normalize_foreign': False,     # apply the substitutions also to entries that do not come from dblp
     'custom_rules': '',             # lines "field: regex => replacement"; field * = all
 }
@@ -442,13 +443,25 @@ def apply_rules(entry, o):
 
 
 def render(entry):
+    exprs = entry.get('exprs') or {}            # macros and # concatenations from a .bib file: written as they are
     lines = [f"@{entry['type']}{{{entry['key']},"]
     for k, v in entry['fields']:
-        lines.append(f'  {k.ljust(12)} = {{{v}}},')
+        lines.append(f'  {k.ljust(12)} = {v},' if k in exprs else f'  {k.ljust(12)} = {{{v}}},')
     if len(lines) > 1:
         lines[-1] = lines[-1][:-1]
     lines.append('}')
     return '\n'.join(lines)
+
+
+VERBATIM_FIELDS = {'url', 'doi', 'file', 'pdf', 'eprint', 'abstract', 'verbatim'}
+
+
+def relayout(entry):
+    """An entry parsed from a .bib file in the layout of the generated ones: two spaces of indentation, aligned
+    "=", values in braces, runs of white space in values as one space. Values, field order and macros stay."""
+    fields = [(k, v if k in VERBATIM_FIELDS or not isinstance(v, str) else re.sub(r'\s+', ' ', v).strip())
+              for k, v in entry['fields']]
+    return render(dict(entry, fields=fields))
 
 
 def make_key(rec, style):

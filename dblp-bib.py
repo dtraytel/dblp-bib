@@ -178,6 +178,8 @@ class App:
                                 r['subst'] = {'text': bibgen.render(ne), 'key': e['key'], 'type': e['type'], 'fields': ne['fields']}
                                 if o['normalize_foreign']:
                                     text = r['subst']['text']
+                            if o['uniform_layout']:
+                                text = bibgen.relayout(ne if o['normalize_foreign'] else e)
                             # fields: the entry as in the file, which is what is compared with dblp
                             r.update(text=text, key=e['key'], type=e['type'], fields=e['fields'])
                             if it.get('match'):

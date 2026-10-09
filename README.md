@@ -27,6 +27,8 @@ A dblp-like web interface to a local copy of the [dblp](https://dblp.org) dump, 
   - LaTeX commands for accents (or plain UTF-8 for biber), brace-protected capitals in titles,
     abbreviated first names, citation key style (dblp, short dblp, `author2019word`)
   - optionally apply the substitutions to entries that do not come from dblp, too
+  - optionally write the entries of a loaded `.bib` file in the same uniform layout as the generated ones
+    (only white space and delimiters change)
   - custom regular-expression rules per field
 - **Data**: shows the date of the dump the index was built from, checks dblp.org for a newer dump,
   downloads it only if there is one, and rebuilds the index in the background (search keeps working on the old index meanwhile).

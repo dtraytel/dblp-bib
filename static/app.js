@@ -722,6 +722,7 @@ const OPTION_UI = [
   { h: 'Existing .bib files' },
   { k: 'keep_keys', t: 'check', l: 'Keep citation keys when updating an entry from dblp', hint: 'So that \\cite commands in the paper keep working.' },
   { k: 'keep_name_spellings', t: 'check', l: 'Keep the accents of names from your .bib file', hint: 'dblp writes some names without accents (Srdan Krstic). If your file has Srđan Krstić (in any LaTeX spelling), that spelling is used for all entries — also ones you add later.' },
+  { k: 'uniform_layout', t: 'check', l: 'Uniform layout', hint: 'Write the entries from your file in the same layout as the generated ones (indentation, aligned “=”, braces). Only white space and delimiters change: values, field order, @string macros and comments stay as they are.' },
   { k: 'normalize_foreign', t: 'check', l: 'Apply the substitutions also to entries that are not from dblp', hint: 'Series names, conference names, url/doi, dropped fields and custom rules.' },
   { h: 'Custom rules' },
   { k: 'custom_rules', t: 'area', rows: 5, l: 'Regular-expression substitutions, applied last', hint: 'One per line: “field: regex => replacement”, field * for all. An empty result removes the field. Example: “publisher: ^Schloss Dagstuhl.*$ => Schloss Dagstuhl”.' },

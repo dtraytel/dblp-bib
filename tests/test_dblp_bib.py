@@ -281,6 +281,44 @@ class Database(unittest.TestCase):
         r = self.render([{'id': 1, 'kind': 'raw', 'raw': r['subst']['text']}])['items'][0]
         self.assertNotIn('subst', r)                                              # applied: nothing pending
 
+    def test_macros_kept(self):
+        raw = '''@inproceedings{x,
+  title={Proofs in Coq},
+  series = lncs # { Vol. 1},
+  month = jan
+}'''
+        r = self.render([{'id': 1, 'kind': 'raw', 'raw': raw}], custom_rules='title: (?<!\\{)\\b(Coq)\\b => {\\1}')['items'][0]
+        self.assertIn('title        = {Proofs in {Coq}},', r['subst']['text'])
+        self.assertIn('series       = lncs # { Vol. 1},', r['subst']['text'])
+        self.assertIn('month        = jan\n}', r['subst']['text'])
+
+    def test_uniform_layout(self):
+        raw = '''@InProceedings{x,
+     author = "Hoare, C. A. R. and
+               Wirth, Niklaus",
+  title={Proofs  in {Coq}},
+  series = lncs # { Vol. 1},
+  url = {https://example.org/a b},
+  year = 2020, month = jan
+}'''
+        item = {'id': 1, 'kind': 'raw', 'raw': raw}
+        self.assertEqual(self.render([item])['items'][0]['text'], raw)            # off by default
+        r = self.render([item], uniform_layout=True)['items'][0]
+        self.assertEqual(r['text'], '''@inproceedings{x,
+  author       = {Hoare, C. A. R. and Wirth, Niklaus},
+  title        = {Proofs in {Coq}},
+  series       = lncs # { Vol. 1},
+  url          = {https://example.org/a b},
+  year         = {2020},
+  month        = jan
+}''')
+        self.assertNotIn('subst', r)                                              # layout is not a difference
+        gen = self.render([{'id': 1, 'kind': 'dblp', 'dblp': 'conf/itp/BrunT19', 'key': 'k'}])['items'][0]['text']
+        messy = gen.replace('  author       = ', '\tauthor =')
+        r = self.render([{'id': 1, 'kind': 'raw', 'raw': messy, 'match': 'conf/itp/BrunT19'}], uniform_layout=True)['items'][0]
+        self.assertTrue(r['alt']['same'])
+        self.assertEqual(r['text'], gen)
+
     def test_outdated_without_substitution(self):
         rule = 'author: (?<!\\{)Huerta y Munive => {Huerta y Munive}'
         gen = self.render([{'id': 1, 'kind': 'dblp', 'dblp': 'conf/itp/BrunT19', 'key': 'k'}])['items'][0]['text']
